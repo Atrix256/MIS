@@ -3,7 +3,7 @@
 
 #define DETERMINISTIC() false
 
-static const size_t c_numSamples = 100; // TODO: larger sample count?
+static const size_t c_numSamples = 500; // TODO: larger sample count?
 
 static const double c_pi = 3.14159265359;
 static const double c_goldeRatioConjugate = 0.61803398875;
