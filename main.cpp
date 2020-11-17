@@ -3,7 +3,7 @@
 
 #define DETERMINISTIC() false
 
-static const size_t c_numSamples = 1000; // TODO: larger sample count?
+static const size_t c_numSamples = 100; // TODO: larger sample count?
 
 static const double c_pi = 3.14159265359;
 static const double c_goldeRatioConjugate = 0.61803398875;
@@ -23,6 +23,48 @@ std::mt19937 GetRNG()
 inline double max(double a, double b)
 {
     return a >= b ? a : b;
+}
+
+inline double min(double a, double b)
+{
+    return a <= b ? a : b;
+}
+
+inline double TorroidalDistance(double a, double b)
+{
+    double dist = abs(a - b);
+    if (dist > 0.5)
+        dist = 1.0 - dist;
+    return dist;
+}
+
+void MakeBlueNoise(std::vector<double>& samples, size_t sampleCount)
+{
+    std::mt19937 rng = GetRNG();
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    samples.resize(sampleCount);
+    for (size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+    {
+        double bestCandidate = 0.0f;
+        double bestCandidateScore = 0.0f;
+
+        for (size_t candidateIndex = 0; candidateIndex <= sampleIndex; ++candidateIndex)
+        {
+            double candidate = dist(rng);
+            double minDist = FLT_MAX;
+            for (size_t distIndex = 0; distIndex < sampleIndex; ++distIndex)
+                minDist = min(minDist, TorroidalDistance(candidate, samples[distIndex]));
+
+            if (minDist > bestCandidateScore)
+            {
+                bestCandidate = candidate;
+                bestCandidateScore = minDist;
+            }
+        }
+
+        samples[sampleIndex] = bestCandidate;
+    }
 }
 
 void AddSampleToRunningAverage(double &average, double newValue, size_t sampleCount)
@@ -71,6 +113,25 @@ double MonteCarloLDS(const TF& F, std::vector<double>& estimates)
     return estimate * c_pi;
 }
 
+template <typename TF>
+double MonteCarloBlue(const TF& F, std::vector<double>& estimates)
+{
+    std::vector<double> blueNoise;
+    MakeBlueNoise(blueNoise, c_numSamples);
+
+    estimates.resize(c_numSamples);
+    double estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x = blueNoise[i] * c_pi;
+        double y = F(x);
+        AddSampleToRunningAverage(estimate, y, i);
+        estimates[i] = estimate * c_pi;
+    }
+
+    return estimate * c_pi;
+}
+
 template <typename TF, typename TPDF, typename TINVERSECDF>
 double ImportanceSampledMonteCarlo(const TF& F, const TPDF& PDF, const TINVERSECDF& InverseCDF, std::vector<double>& estimates)
 {
@@ -113,6 +174,27 @@ double ImportanceSampledMonteCarloLDS(const TF& F, const TPDF& PDF, const TINVER
     return estimate;
 }
 
+template <typename TF, typename TPDF, typename TINVERSECDF>
+double ImportanceSampledMonteCarloBlue(const TF& F, const TPDF& PDF, const TINVERSECDF& InverseCDF, std::vector<double>& estimates)
+{
+    std::vector<double> blueNoise;
+    MakeBlueNoise(blueNoise, c_numSamples);
+
+    estimates.resize(c_numSamples);
+    double estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x = InverseCDF(blueNoise[i]);
+        double y = F(x);
+        double pdf = PDF(x);
+        double value = y / pdf;
+        AddSampleToRunningAverage(estimate, value, i);
+        estimates[i] = estimate;
+    }
+
+    return estimate;
+}
+
 int main(int argc, char** argv)
 {
     {
@@ -137,31 +219,41 @@ int main(int argc, char** argv)
         std::vector<double> mcEstimates;
         double mc = MonteCarlo(F, mcEstimates);
 
+        std::vector<double> mcblueEstimates;
+        double mcblue = MonteCarloBlue(F, mcblueEstimates);
+
         std::vector<double> mcldsEstimates;
         double mclds = MonteCarloLDS(F, mcldsEstimates);
 
         std::vector<double> ismcEstimates;
         double ismc = ImportanceSampledMonteCarlo(F, PDF, InverseCDF, ismcEstimates);
 
+        std::vector<double> ismcblueEstimates;
+        double ismcblue = ImportanceSampledMonteCarloBlue(F, PDF, InverseCDF, ismcblueEstimates);
+
         std::vector<double> ismcldsEstimates;
         double ismclds = ImportanceSampledMonteCarloLDS(F, PDF, InverseCDF, ismcldsEstimates);
 
         // report results
         {
-            printf("mc      = %f  (%f)\n", mc, abs(mc - c_actual));
-            printf("mclds   = %f  (%f)\n", mclds, abs(mclds - c_actual));
-            printf("ismc    = %f  (%f)\n", ismc, abs(ismc - c_actual));
-            printf("ismclds = %f  (%f)\n", ismclds, abs(ismclds - c_actual));
+            printf("mc       = %f  (%f)\n", mc, abs(mc - c_actual));
+            printf("mcblue   = %f  (%f)\n", mcblue, abs(mcblue - c_actual));
+            printf("mclds    = %f  (%f)\n", mclds, abs(mclds - c_actual));
+            printf("ismc     = %f  (%f)\n", ismc, abs(ismc - c_actual));
+            printf("ismcblue = %f  (%f)\n", ismcblue, abs(ismcblue - c_actual));
+            printf("ismclds  = %f  (%f)\n", ismclds, abs(ismclds - c_actual));
 
             FILE* file = nullptr;
             fopen_s(&file, "out.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mclds\",\"ismc\",\"ismclds\"\n");
+            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc\",\"ismcblue\",\"ismclds\"\n");
             for (size_t i = 0; i < c_numSamples; ++i)
             {
                 fprintf(file, "\"%zu\",", i);
                 fprintf(file, "\"%f\",", max(abs(mcEstimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mcblueEstimates[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(mcldsEstimates[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(ismcEstimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismcblueEstimates[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\"\n", max(abs(ismcldsEstimates[i] - c_actual), c_minError));
             }
             fclose(file);
@@ -178,7 +270,6 @@ TODO:
 * stochastically choose the technique? also with LDS (golden ratio)?
 * maybe do a couple functions with the above?
 * show error on log/log: scatter plot in open office, then format x/y axis to log
-? maybe do a run with 1d blue noise?
 
 
 Blog:
@@ -188,7 +279,7 @@ Blog:
  * https://blog.demofox.org/2018/06/12/monte-carlo-integration-explanation-in-1d/
  * note that you can give a different number of samples for each technique, if you think they will do better than others.
  ! could learn on the fly maybe. is that adaptive MIS?
- ! show how LDS + IS doesn't work well together.
+ ! show how LDS + IS doesn't work well together. (actually, probably works fine in 1d). show blue noise
 
 Links:
 https://64.github.io/multiple-importance-sampling/
