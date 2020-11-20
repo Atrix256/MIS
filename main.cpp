@@ -2,8 +2,9 @@
 #include <vector>
 
 #define DETERMINISTIC() true
+#define DO_BLUE_NOISE() false
 
-static const size_t c_numSamples = 500;
+static const size_t c_numSamples = 5000;
 static const size_t c_numTests = 100;
 
 static const double c_pi = 3.14159265359;
@@ -47,6 +48,7 @@ inline double TorroidalDistance(double a, double b)
 
 void MakeBlueNoise(std::vector<double>& samples, size_t sampleCount, int seed)
 {
+#if DO_BLUE_NOISE()
     std::mt19937 rng = GetRNG(seed);
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
@@ -72,6 +74,14 @@ void MakeBlueNoise(std::vector<double>& samples, size_t sampleCount, int seed)
 
         samples[sampleIndex] = bestCandidate;
     }
+#else
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    samples.resize(sampleCount);
+    for (double& d : samples)
+        d = dist(rng);
+#endif
 }
 
 void AddSampleToRunningAverage(double &average, double newValue, size_t sampleCount)
