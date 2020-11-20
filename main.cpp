@@ -499,11 +499,12 @@ int main(int argc, char** argv)
 /*
 
 TODO:
-* stochastically choose the technique? also with LDS (golden ratio)?
+* stochastically choose the technique? also with LDS (golden ratio)? yes do this.
 * should report variance too
 
 
 Blog:
+* you divide f(x) by the sum of probabilities of the techniques for x. albegraicly this makes sense, but not sure intuitively.
 * real simple / light on math / plainly described.
  * the other articles do a good job, but this is the "lemme just see the code" type of a post
 * a follow up to 1d monte carlo / importance sampling:
