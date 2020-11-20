@@ -2,13 +2,14 @@
 #include <vector>
 
 #define DETERMINISTIC() true
-#define DO_BLUE_NOISE() true
+#define DO_BLUE_NOISE() false  // blue noise is very slow to generate, and doesn't have good convergence speed
 
-static const size_t c_numSamples = 100;
-static const size_t c_numTests = 1000;
+static const size_t c_numSamples = 1000;
+static const size_t c_numTests = 10000;
 
 static const double c_pi = 3.14159265359;
 static const double c_goldeRatioConjugate = 0.61803398875;
+static const double c_sqrt2 = sqrt(2.0);
 static const double c_minError = 0.00001; // to avoid errors when showing on a log plot
 
 std::mt19937 GetRNG(int seed)
@@ -243,6 +244,42 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
     }
 }
 
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2>
+void MultipleImportanceSampledMonteCarloLDS(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, Result& result, int seed)
+{
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    result.estimates.resize(c_numSamples);
+
+    double lds1 = dist(rng);
+    double lds2 = dist(rng);
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(lds1);
+        double y1 = F(x1);
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+
+        double x2 = InverseCDF2(lds2);
+        double y2 = F(x2);
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+
+        double value =
+            y1 / (pdf11 + pdf12) +
+            y2 / (pdf21 + pdf22)
+            ;
+
+        AddSampleToRunningAverage(result.estimate, value, i);
+        result.estimates[i] = result.estimate;
+
+        lds1 = fmod(lds1 + c_goldeRatioConjugate, 1.0f);
+        lds2 = fmod(lds2 + c_sqrt2, 1.0f);
+    }
+}
+
 void IntegrateResult(Result& total, const Result& sample, int sampleCount)
 {
     AddSampleToRunningAverage(total.estimate, sample.estimate, sampleCount);
@@ -351,6 +388,7 @@ int main(int argc, char** argv)
             Result ismcblue2;
             Result ismclds2;
             Result mismc;
+            Result mismclds;
         };
         Tests tests, testsTotal;
 
@@ -400,6 +438,7 @@ int main(int argc, char** argv)
             ImportanceSampledMonteCarloBlue(F, PDF2, InverseCDF2, tests.ismcblue2, testIndex);
             ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, tests.ismclds2, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, tests.mismc, testIndex);
+            MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, tests.mismclds, testIndex);
 
             IntegrateResult(testsTotal.mc, tests.mc, testIndex);
             IntegrateResult(testsTotal.mcblue, tests.mcblue, testIndex);
@@ -411,6 +450,7 @@ int main(int argc, char** argv)
             IntegrateResult(testsTotal.ismcblue2, tests.ismcblue2, testIndex);
             IntegrateResult(testsTotal.ismclds2, tests.ismclds2, testIndex);
             IntegrateResult(testsTotal.mismc, tests.mismc, testIndex);
+            IntegrateResult(testsTotal.mismclds, tests.mismclds, testIndex);
         }
 
         // report results
@@ -427,12 +467,13 @@ int main(int argc, char** argv)
             printf("  ismcblue2 = %f  (%f)\n", testsTotal.ismcblue2.estimate, abs(testsTotal.ismcblue2.estimate - c_actual));
             printf("  ismclds2  = %f  (%f)\n", testsTotal.ismclds2.estimate, abs(testsTotal.ismclds2.estimate - c_actual));
             printf("  mismc     = %f  (%f)\n", testsTotal.mismc.estimate, abs(testsTotal.mismc.estimate - c_actual));
+            printf("  mismclds  = %f  (%f)\n", testsTotal.mismclds.estimate, abs(testsTotal.mismclds.estimate - c_actual));
             printf("\n");
 
             // details to csv
             FILE* file = nullptr;
             fopen_s(&file, "out2.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\"\n");
+            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismclds\"\n");
             for (size_t i = 0; i < c_numSamples; ++i)
             {
                 fprintf(file, "\"%zu\",", i);
@@ -445,13 +486,12 @@ int main(int argc, char** argv)
                 fprintf(file, "\"%f\",", max(abs(testsTotal.ismc2.estimates[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(testsTotal.ismcblue2.estimates[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(testsTotal.ismclds2.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\"\n", max(abs(testsTotal.mismc.estimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(testsTotal.mismc.estimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\"\n", max(abs(testsTotal.mismclds.estimates[i] - c_actual), c_minError));
             }
             fclose(file);
         }
     }
-
-    // TODO: should 2nd test have LDS and Blue noise versions? maybe so... could be interesting!
 
     return 0;
 }
