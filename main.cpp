@@ -271,11 +271,13 @@ int main(int argc, char** argv)
         // the PDF and inverse CDF of a distribution we are using for integration
         auto PDF = [](double x) -> double
         {
+            // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
             return sin(x) / 2.0f;
         };
 
         auto InverseCDF = [](double x) -> double
         {
+            // turning the PDF into a CDF, flipping x and y, and solving for y again
             return 2.0 * asin(sqrt(x));
         };
 
@@ -355,7 +357,7 @@ int main(int argc, char** argv)
         // the PDF and inverse CDF of distributions we are using for integration
         auto PDF1 = [](double x) -> double
         {
-            // normalizing y=sin(x) from 0 to pi to integrate to 1
+            // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
             return sin(x) / 2.0f;
         };
 
@@ -367,7 +369,7 @@ int main(int argc, char** argv)
 
         auto PDF2 = [](double x) -> double
         {
-            // normalizing y=2x from 0 to pi to integrate to 1
+            // normalizing y=2x from 0 to pi to integrate to 1 from 0 to pi
             return x * 2.0f / (c_pi * c_pi);
         };
 
