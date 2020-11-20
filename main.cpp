@@ -272,7 +272,7 @@ int main(int argc, char** argv)
         auto PDF = [](double x) -> double
         {
             // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
-            return sin(x) / 2.0f;
+            return sin(x) / 2.0;
         };
 
         auto InverseCDF = [](double x) -> double
@@ -281,7 +281,7 @@ int main(int argc, char** argv)
             return 2.0 * asin(sqrt(x));
         };
 
-        double c_actual = c_pi / 2.0f;
+        double c_actual = c_pi / 2.0;
 
         // numerical integration
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
@@ -351,14 +351,14 @@ int main(int argc, char** argv)
         // The function we are integrating
         auto F = [](double x) -> double
         {
-            return sin(x) * 2.0f * x;
+            return sin(x) * 2.0 * x;
         };
 
         // the PDF and inverse CDF of distributions we are using for integration
         auto PDF1 = [](double x) -> double
         {
             // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
-            return sin(x) / 2.0f;
+            return sin(x) / 2.0;
         };
 
         auto InverseCDF1 = [](double x) -> double
@@ -370,7 +370,7 @@ int main(int argc, char** argv)
         auto PDF2 = [](double x) -> double
         {
             // normalizing y=2x from 0 to pi to integrate to 1 from 0 to pi
-            return x * 2.0f / (c_pi * c_pi);
+            return x * 2.0 / (c_pi * c_pi);
         };
 
         auto InverseCDF2 = [](double x) -> double
@@ -379,7 +379,7 @@ int main(int argc, char** argv)
             return c_pi * sqrt(x);
         };
 
-        double c_actual = 2.0f * c_pi;
+        double c_actual = 2.0 * c_pi;
 
         // numerical integration
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
@@ -445,9 +445,9 @@ int main(int argc, char** argv)
         }
     }
 
-    // TODO: do the tests multiple times and average the results and variance. output single as well as multiple. MIS being worse could be luck of the draw.
     // TODO: should 2nd test have LDS and Blue noise versions? maybe so... could be interesting!
     // TODO: do a 3rd test where it's a second test multiplied by some boolean function (visibility)
+    // TODO: MIS is not doing as well as either individual IS, why not?!
 
     return 0;
 }
