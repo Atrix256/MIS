@@ -2,10 +2,10 @@
 #include <vector>
 
 #define DETERMINISTIC() true
-#define DO_BLUE_NOISE() false
+#define DO_BLUE_NOISE() true
 
-static const size_t c_numSamples = 5000;
-static const size_t c_numTests = 100;
+static const size_t c_numSamples = 100;
+static const size_t c_numTests = 1000;
 
 static const double c_pi = 3.14159265359;
 static const double c_goldeRatioConjugate = 0.61803398875;
@@ -16,7 +16,7 @@ std::mt19937 GetRNG(int seed)
 #if DETERMINISTIC()
     std::mt19937 mt(seed);
 #else
-    std::random_device rd;
+    std::random_device rd("/dev/random");
     std::mt19937 mt(rd());
 #endif
     return mt;
@@ -113,10 +113,13 @@ void MonteCarlo(const TF& F, Result& result, int seed)
 }
 
 template <typename TF>
-void MonteCarloLDS(const TF& F, Result& result)
+void MonteCarloLDS(const TF& F, Result& result, int seed)
 {
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0f);
+
     result.estimates.resize(c_numSamples);
-    double lds = 0.5;
+    double lds = dist(rng);
     result.estimate = 0.0f;
     for (size_t i = 0; i < c_numSamples; ++i)
     {
@@ -170,10 +173,13 @@ void ImportanceSampledMonteCarlo(const TF& F, const TPDF& PDF, const TINVERSECDF
 }
 
 template <typename TF, typename TPDF, typename TINVERSECDF>
-void ImportanceSampledMonteCarloLDS(const TF& F, const TPDF& PDF, const TINVERSECDF& InverseCDF, Result& result)
+void ImportanceSampledMonteCarloLDS(const TF& F, const TPDF& PDF, const TINVERSECDF& InverseCDF, Result& result, int seed)
 {
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0f);
+
     result.estimates.resize(c_numSamples);
-    double lds = 0.5;
+    double lds = dist(rng);
     result.estimate = 0.0f;
     for (size_t i = 0; i < c_numSamples; ++i)
     {
@@ -219,18 +225,18 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
     {
         double x1 = InverseCDF1(dist(rng));
         double y1 = F(x1);
-        double pdf1 = PDF1(x1);
-        double value1 = y1 / pdf1;
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
 
         double x2 = InverseCDF2(dist(rng));
         double y2 = F(x2);
-        double pdf2 = PDF2(x2);
-        double value2 = y2 / pdf2;
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
 
-        double weight1 = pdf1 / (pdf1 + pdf2);
-        double weight2 = pdf2 / (pdf1 + pdf2);
-
-        double value = value1 * weight1 + value2 * weight2;
+        double value =
+            y1 / (pdf11 + pdf12) +
+            y2 / (pdf21 + pdf22)
+        ;
 
         AddSampleToRunningAverage(result.estimate, value, i);
         result.estimates[i] = result.estimate;
@@ -288,10 +294,10 @@ int main(int argc, char** argv)
         {
             MonteCarlo(F, tests.mc, testIndex);
             MonteCarloBlue(F, tests.mcblue, testIndex);
-            MonteCarloLDS(F, tests.mclds);
+            MonteCarloLDS(F, tests.mclds, testIndex);
             ImportanceSampledMonteCarlo(F, PDF, InverseCDF, tests.ismc, testIndex);
             ImportanceSampledMonteCarloBlue(F, PDF, InverseCDF, tests.ismcblue, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF, InverseCDF, tests.ismclds);
+            ImportanceSampledMonteCarloLDS(F, PDF, InverseCDF, tests.ismclds, testIndex);
 
             IntegrateResult(testsTotal.mc, tests.mc, testIndex);
             IntegrateResult(testsTotal.mcblue, tests.mcblue, testIndex);
@@ -386,13 +392,13 @@ int main(int argc, char** argv)
         {
             MonteCarlo(F, tests.mc, testIndex);
             MonteCarloBlue(F, tests.mcblue, testIndex);
-            MonteCarloLDS(F, tests.mclds);
+            MonteCarloLDS(F, tests.mclds, testIndex);
             ImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, tests.ismc1, testIndex);
             ImportanceSampledMonteCarloBlue(F, PDF1, InverseCDF1, tests.ismcblue1, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, tests.ismclds1);
+            ImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, tests.ismclds1, testIndex);
             ImportanceSampledMonteCarlo(F, PDF2, InverseCDF2, tests.ismc2, testIndex);
             ImportanceSampledMonteCarloBlue(F, PDF2, InverseCDF2, tests.ismcblue2, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, tests.ismclds2);
+            ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, tests.ismclds2, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, tests.mismc, testIndex);
 
             IntegrateResult(testsTotal.mc, tests.mc, testIndex);
@@ -446,8 +452,6 @@ int main(int argc, char** argv)
     }
 
     // TODO: should 2nd test have LDS and Blue noise versions? maybe so... could be interesting!
-    // TODO: do a 3rd test where it's a second test multiplied by some boolean function (visibility)
-    // TODO: MIS is not doing as well as either individual IS, why not?!
 
     return 0;
 }
@@ -455,11 +459,8 @@ int main(int argc, char** argv)
 /*
 
 TODO:
-* sample 2 functions multiplied together - compare to sampling one, or the other, or uniform random
-* maybe do more than 2 sampling strategies to see if you can do better?
 * stochastically choose the technique? also with LDS (golden ratio)?
-* maybe do a couple functions with the above?
-* show error on log/log: scatter plot in open office, then format x/y axis to log
+* should report variance too
 
 
 Blog:
@@ -470,6 +471,13 @@ Blog:
  * note that you can give a different number of samples for each technique, if you think they will do better than others.
  ! could learn on the fly maybe. is that adaptive MIS?
  ! show how LDS + IS doesn't work well together. (actually, probably works fine in 1d). show blue noise
+ * MIS takes more samples.
+ * show error on log/log: scatter plot in open office, then format x/y axis to log
+ * if no bias, reducing variance is the same as removing error.
+
+ "it is allowable for some of the p_i to be specialized sampling techniques that concentrate on specific regions of the integrand"
+ * aka if you have at least one technique for each section this will work. can have multiple techniques for multiple sections
+ * a technique doesn't need to fit the whole function though!
 
 Links:
 https://64.github.io/multiple-importance-sampling/
