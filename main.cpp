@@ -247,6 +247,8 @@ void IntegrateResult(Result& total, const Result& sample, int sampleCount)
 
 int main(int argc, char** argv)
 {
+    printf("%zu tests, with %zu samples each.\n\n", c_numTests, c_numSamples);
+
     // y = sin(x)*sin(x) from 0 to pi
     {
         struct Tests
