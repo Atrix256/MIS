@@ -4,6 +4,8 @@
 #define DETERMINISTIC() true
 #define DO_BLUE_NOISE() false  // blue noise is very slow to generate, and doesn't have good convergence speed
 
+#define DO_PDF_TEST() true
+
 static const size_t c_numSamples = 1000;
 static const size_t c_numTests = 10000;
 
@@ -288,8 +290,156 @@ void IntegrateResult(Result& total, const Result& sample, int sampleCount)
         AddSampleToRunningAverage(total.estimates[index], sample.estimates[index], sampleCount);
 }
 
+void PDFTest1()
+{
+    std::mt19937 rng = GetRNG(0);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    double sumAverage = 0.0;
+    //double OOSumAverage = 0.0;
+
+    // y=x normalized to y=x * 2
+    auto PDF1 = [](double x) -> double
+    {
+        return x * 2.0;
+    };
+
+    // y=1
+    auto PDF2 = [](double x) -> double
+    {
+        return 1.0;
+    };
+
+    // y=sin(x*pi) normalized to y=sin(x*pi)*pi/2
+    auto PDF3 = [](double x) -> double
+    {
+        return sin(x * c_pi) * c_pi / 2.0;
+    };
+
+    for (size_t index = 0; index < 100000; ++index)
+    {
+        double x = dist(rng);
+
+        double sum = PDF1(x) + PDF2(x) + PDF3(x);
+
+        AddSampleToRunningAverage(sumAverage, sum, index);
+        //AddSampleToRunningAverage(OOSumAverage, 1.0f / sum, index);
+    }
+
+    //printf("PDFTest1:\n  sum=%f\n  oosum=%f (%f)\n\n", sumAverage, OOSumAverage, 1.0f / OOSumAverage);
+    printf("PDFTest1: %f (%f)\n", sumAverage, sumAverage - 3.0 / 1.0);
+}
+
+void PDFTest2()
+{
+    std::mt19937 rng = GetRNG(0);
+    std::uniform_real_distribution<double> dist(0.0, 5.0);
+
+    double sumAverage = 0.0;
+    //double OOSumAverage = 0.0;
+
+    // y=x normalized to y=x*2/25
+    auto PDF1 = [](double x) -> double
+    {
+        return x * 2.0/25.0;
+    };
+
+    // y=1 normalized to y=1/5
+    auto PDF2 = [](double x) -> double
+    {
+        return 1.0 / 5.0;
+    };
+
+    // y=sin(x*pi/5) normalized to y=sin(x*pi/5) * pi/10
+    auto PDF3 = [](double x) -> double
+    {
+        return sin(x * c_pi / 5.0) * c_pi / 10.0;
+    };
+
+    for (size_t index = 0; index < 100000; ++index)
+    {
+        double x = dist(rng);
+
+        double sum = PDF1(x) + PDF2(x) + PDF3(x);
+
+        AddSampleToRunningAverage(sumAverage, sum, index);
+        //AddSampleToRunningAverage(OOSumAverage, 1.0f / sum, index);
+    }
+
+    //printf("PDFTest2:\n  sum=%f\n  oosum=%f (%f)\n\n", sumAverage, OOSumAverage, 1.0f / OOSumAverage);
+    printf("PDFTest2: %f (%f)\n", sumAverage, sumAverage - 3.0 / 5.0);
+}
+
+void PDFTest3()
+{
+    std::mt19937 rng = GetRNG(0);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    // The function we are integrating
+    auto F = [](double x) -> double
+    {
+        return sin(x) * 2.0 * x;
+    };
+
+    // the PDF and inverse CDF of distributions we are using for integration
+    auto PDF1 = [](double x) -> double
+    {
+        // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
+        return sin(x) / 2.0;
+    };
+
+    auto InverseCDF1 = [](double x) -> double
+    {
+        // turning the PDF into a CDF, flipping x and y, and solving for y again
+        return 2.0 * asin(sqrt(x));
+    };
+
+    auto PDF2 = [](double x) -> double
+    {
+        // normalizing y=2x from 0 to pi to integrate to 1 from 0 to pi
+        return x * 2.0 / (c_pi * c_pi);
+    };
+
+    auto InverseCDF2 = [](double x) -> double
+    {
+        // turning the PDF into a CDF, flipping x and y, and solving for y again
+        return c_pi * sqrt(x);
+    };
+
+    double c_actual = 2.0 * c_pi;
+
+    double integrated1 = 0.0;
+    double integrated2 = 0.0;
+    double integrated = 0.0;
+
+    for (size_t index = 0; index < 100000; ++index)
+    {
+        double rng1 = dist(rng);
+        double x1 = InverseCDF1(rng1);
+        double y1 = F(x1) / (PDF1(x1) + PDF2(x1));
+
+        double rng2 = dist(rng);
+        double x2 = InverseCDF2(dist(rng));
+        double y2 = F(x2) / (PDF1(x2) + PDF2(x2));
+
+        AddSampleToRunningAverage(integrated1, y1, index);
+        AddSampleToRunningAverage(integrated2, y2, index);
+        AddSampleToRunningAverage(integrated, y1 + y2, index);
+    }
+
+    printf("PDFTest3-1: %f (%f)\n", integrated1, integrated1 - c_actual);
+    printf("PDFTest3-2: %f (%f)\n", integrated2, integrated2 - c_actual);
+    printf("PDFTest3  : %f (%f)\n", integrated, integrated - c_actual);
+}
+
 int main(int argc, char** argv)
 {
+#if DO_PDF_TEST() // experiments to help demonstrate how and why MIS works
+    PDFTest1(); // showing how the expected value of the sum of 3 PDF's is 3 (instead of 1, it's from 0 to 1)
+    PDFTest2(); // showing how the expected value of the sum of 3 PDS's are 3x too large. (0.6 instead of 0.2, it's from 0 to 5)
+    PDFTest3(); // showing how this MIS formulaion with 2 PDFs makes two values which are each 50% sized, so adding them together makes the correct value.
+#endif
+
     printf("%zu tests, with %zu samples each.\n\n", c_numTests, c_numSamples);
 
     // y = sin(x)*sin(x) from 0 to pi
@@ -500,7 +650,9 @@ int main(int argc, char** argv)
 
 TODO:
 * stochastically choose the technique? also with LDS (golden ratio)? yes do this.
-* should report variance too
+* should report variance too - MIS reduces variance?
+* multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
+* multiply other function in like a shadow term?
 
 
 Blog:
