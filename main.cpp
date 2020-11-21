@@ -29,6 +29,12 @@ struct Result
 {
     double estimate;
     std::vector<double> estimates;
+
+    double estimateAvg;
+    std::vector<double> estimatesAvg;
+
+    double estimateSqAvg;
+    std::vector<double> estimatesSqAvg;
 };
 
 inline double max(double a, double b)
@@ -282,12 +288,19 @@ void MultipleImportanceSampledMonteCarloLDS(const TF& F, const TPDF1& PDF1, cons
     }
 }
 
-void IntegrateResult(Result& total, const Result& sample, int sampleCount)
+void IntegrateResult(Result& sample, int sampleCount)
 {
-    AddSampleToRunningAverage(total.estimate, sample.estimate, sampleCount);
-    total.estimates.resize(sample.estimates.size());
-    for (size_t index = 0; index < total.estimates.size(); ++index)
-        AddSampleToRunningAverage(total.estimates[index], sample.estimates[index], sampleCount);
+    AddSampleToRunningAverage(sample.estimateAvg, sample.estimate, sampleCount);
+    AddSampleToRunningAverage(sample.estimateSqAvg, sample.estimate * sample.estimate, sampleCount);
+
+    sample.estimatesAvg.resize(sample.estimates.size());
+    sample.estimatesSqAvg.resize(sample.estimates.size());
+
+    for (size_t index = 0; index < sample.estimates.size(); ++index)
+    {
+        AddSampleToRunningAverage(sample.estimatesAvg[index], sample.estimates[index], sampleCount);
+        AddSampleToRunningAverage(sample.estimatesSqAvg[index], sample.estimates[index] * sample.estimates[index], sampleCount);
+    }
 }
 
 void PDFTest1()
@@ -296,7 +309,6 @@ void PDFTest1()
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     double sumAverage = 0.0;
-    //double OOSumAverage = 0.0;
 
     // y=x normalized to y=x * 2
     auto PDF1 = [](double x) -> double
@@ -319,14 +331,10 @@ void PDFTest1()
     for (size_t index = 0; index < 100000; ++index)
     {
         double x = dist(rng);
-
         double sum = PDF1(x) + PDF2(x) + PDF3(x);
-
         AddSampleToRunningAverage(sumAverage, sum, index);
-        //AddSampleToRunningAverage(OOSumAverage, 1.0f / sum, index);
     }
 
-    //printf("PDFTest1:\n  sum=%f\n  oosum=%f (%f)\n\n", sumAverage, OOSumAverage, 1.0f / OOSumAverage);
     printf("PDFTest1: %f (%f)\n", sumAverage, sumAverage - 3.0 / 1.0);
 }
 
@@ -359,14 +367,10 @@ void PDFTest2()
     for (size_t index = 0; index < 100000; ++index)
     {
         double x = dist(rng);
-
         double sum = PDF1(x) + PDF2(x) + PDF3(x);
-
         AddSampleToRunningAverage(sumAverage, sum, index);
-        //AddSampleToRunningAverage(OOSumAverage, 1.0f / sum, index);
     }
 
-    //printf("PDFTest2:\n  sum=%f\n  oosum=%f (%f)\n\n", sumAverage, OOSumAverage, 1.0f / OOSumAverage);
     printf("PDFTest2: %f (%f)\n", sumAverage, sumAverage - 3.0 / 5.0);
 }
 
@@ -427,9 +431,9 @@ void PDFTest3()
         AddSampleToRunningAverage(integrated, y1 + y2, index);
     }
 
-    printf("PDFTest3-1: %f (%f)\n", integrated1, integrated1 - c_actual);
-    printf("PDFTest3-2: %f (%f)\n", integrated2, integrated2 - c_actual);
-    printf("PDFTest3  : %f (%f)\n", integrated, integrated - c_actual);
+    printf("PDFTest3   A: %f (%f)\n", integrated1, integrated1 - c_actual);
+    printf("PDFTest3   B: %f (%f)\n", integrated2, integrated2 - c_actual);
+    printf("PDFTest3 A+B: %f (%f)\n", integrated, integrated - c_actual);
 }
 
 int main(int argc, char** argv)
@@ -444,16 +448,12 @@ int main(int argc, char** argv)
 
     // y = sin(x)*sin(x) from 0 to pi
     {
-        struct Tests
-        {
-            Result mc;
-            Result mcblue;
-            Result mclds;
-            Result ismc;
-            Result ismcblue;
-            Result ismclds;
-        };
-        Tests tests, testsTotal;
+        Result mc;
+        Result mcblue;
+        Result mclds;
+        Result ismc;
+        Result ismcblue;
+        Result ismclds;
 
         // The function we are integrating
         auto F = [](double x) -> double
@@ -479,31 +479,31 @@ int main(int argc, char** argv)
         // numerical integration
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
         {
-            MonteCarlo(F, tests.mc, testIndex);
-            MonteCarloBlue(F, tests.mcblue, testIndex);
-            MonteCarloLDS(F, tests.mclds, testIndex);
-            ImportanceSampledMonteCarlo(F, PDF, InverseCDF, tests.ismc, testIndex);
-            ImportanceSampledMonteCarloBlue(F, PDF, InverseCDF, tests.ismcblue, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF, InverseCDF, tests.ismclds, testIndex);
+            MonteCarlo(F, mc, testIndex);
+            MonteCarloBlue(F, mcblue, testIndex);
+            MonteCarloLDS(F, mclds, testIndex);
+            ImportanceSampledMonteCarlo(F, PDF, InverseCDF, ismc, testIndex);
+            ImportanceSampledMonteCarloBlue(F, PDF, InverseCDF, ismcblue, testIndex);
+            ImportanceSampledMonteCarloLDS(F, PDF, InverseCDF, ismclds, testIndex);
 
-            IntegrateResult(testsTotal.mc, tests.mc, testIndex);
-            IntegrateResult(testsTotal.mcblue, tests.mcblue, testIndex);
-            IntegrateResult(testsTotal.mclds, tests.mclds, testIndex);
-            IntegrateResult(testsTotal.ismc, tests.ismc, testIndex);
-            IntegrateResult(testsTotal.ismcblue, tests.ismcblue, testIndex);
-            IntegrateResult(testsTotal.ismclds, tests.ismclds, testIndex);
+            IntegrateResult(mc, testIndex);
+            IntegrateResult(mcblue, testIndex);
+            IntegrateResult(mclds, testIndex);
+            IntegrateResult(ismc, testIndex);
+            IntegrateResult(ismcblue, testIndex);
+            IntegrateResult(ismclds, testIndex);
         }
 
         // report results
         {
             // summary to screen
             printf("y = sin(x)*sin(x) from 0 to pi\n");
-            printf("  mc       = %f  (%f)\n", testsTotal.mc.estimate, abs(testsTotal.mc.estimate - c_actual));
-            printf("  mcblue   = %f  (%f)\n", testsTotal.mcblue.estimate, abs(testsTotal.mcblue.estimate - c_actual));
-            printf("  mclds    = %f  (%f)\n", testsTotal.mclds.estimate, abs(testsTotal.mclds.estimate - c_actual));
-            printf("  ismc     = %f  (%f)\n", testsTotal.ismc.estimate, abs(testsTotal.ismc.estimate - c_actual));
-            printf("  ismcblue = %f  (%f)\n", testsTotal.ismcblue.estimate, abs(testsTotal.ismcblue.estimate - c_actual));
-            printf("  ismclds  = %f  (%f)\n", testsTotal.ismclds.estimate, abs(testsTotal.ismclds.estimate - c_actual));
+            printf("  mc       = %f  (%f)\n", mc.estimateAvg, abs(mc.estimateAvg - c_actual));
+            printf("  mcblue   = %f  (%f)\n", mcblue.estimateAvg, abs(mcblue.estimateAvg - c_actual));
+            printf("  mclds    = %f  (%f)\n", mclds.estimateAvg, abs(mclds.estimateAvg - c_actual));
+            printf("  ismc     = %f  (%f)\n", ismc.estimateAvg, abs(ismc.estimateAvg - c_actual));
+            printf("  ismcblue = %f  (%f)\n", ismcblue.estimateAvg, abs(ismcblue.estimateAvg - c_actual));
+            printf("  ismclds  = %f  (%f)\n", ismclds.estimateAvg, abs(ismclds.estimateAvg - c_actual));
             printf("\n");
 
             // details to csv
@@ -513,12 +513,12 @@ int main(int argc, char** argv)
             for (size_t i = 0; i < c_numSamples; ++i)
             {
                 fprintf(file, "\"%zu\",", i);
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mc.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mcblue.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mclds.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismc.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismcblue.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\"\n", max(abs(testsTotal.ismclds.estimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismcblue.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\"\n", max(abs(ismclds.estimatesAvg[i] - c_actual), c_minError));
             }
             fclose(file);
         }
@@ -526,21 +526,17 @@ int main(int argc, char** argv)
 
     // y=sin(x)*2x from 0 to pi
     {
-        struct Tests
-        {
-            Result mc;
-            Result mcblue;
-            Result mclds;
-            Result ismc1;
-            Result ismcblue1;
-            Result ismclds1;
-            Result ismc2;
-            Result ismcblue2;
-            Result ismclds2;
-            Result mismc;
-            Result mismclds;
-        };
-        Tests tests, testsTotal;
+        Result mc;
+        Result mcblue;
+        Result mclds;
+        Result ismc1;
+        Result ismcblue1;
+        Result ismclds1;
+        Result ismc2;
+        Result ismcblue2;
+        Result ismclds2;
+        Result mismc;
+        Result mismclds;
 
         // The function we are integrating
         auto F = [](double x) -> double
@@ -578,46 +574,46 @@ int main(int argc, char** argv)
         // numerical integration
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
         {
-            MonteCarlo(F, tests.mc, testIndex);
-            MonteCarloBlue(F, tests.mcblue, testIndex);
-            MonteCarloLDS(F, tests.mclds, testIndex);
-            ImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, tests.ismc1, testIndex);
-            ImportanceSampledMonteCarloBlue(F, PDF1, InverseCDF1, tests.ismcblue1, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, tests.ismclds1, testIndex);
-            ImportanceSampledMonteCarlo(F, PDF2, InverseCDF2, tests.ismc2, testIndex);
-            ImportanceSampledMonteCarloBlue(F, PDF2, InverseCDF2, tests.ismcblue2, testIndex);
-            ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, tests.ismclds2, testIndex);
-            MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, tests.mismc, testIndex);
-            MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, tests.mismclds, testIndex);
+            MonteCarlo(F, mc, testIndex);
+            MonteCarloBlue(F, mcblue, testIndex);
+            MonteCarloLDS(F, mclds, testIndex);
+            ImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, ismc1, testIndex);
+            ImportanceSampledMonteCarloBlue(F, PDF1, InverseCDF1, ismcblue1, testIndex);
+            ImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, ismclds1, testIndex);
+            ImportanceSampledMonteCarlo(F, PDF2, InverseCDF2, ismc2, testIndex);
+            ImportanceSampledMonteCarloBlue(F, PDF2, InverseCDF2, ismcblue2, testIndex);
+            ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, ismclds2, testIndex);
+            MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismc, testIndex);
+            MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismclds, testIndex);
 
-            IntegrateResult(testsTotal.mc, tests.mc, testIndex);
-            IntegrateResult(testsTotal.mcblue, tests.mcblue, testIndex);
-            IntegrateResult(testsTotal.mclds, tests.mclds, testIndex);
-            IntegrateResult(testsTotal.ismc1, tests.ismc1, testIndex);
-            IntegrateResult(testsTotal.ismcblue1, tests.ismcblue1, testIndex);
-            IntegrateResult(testsTotal.ismclds1, tests.ismclds1, testIndex);
-            IntegrateResult(testsTotal.ismc2, tests.ismc2, testIndex);
-            IntegrateResult(testsTotal.ismcblue2, tests.ismcblue2, testIndex);
-            IntegrateResult(testsTotal.ismclds2, tests.ismclds2, testIndex);
-            IntegrateResult(testsTotal.mismc, tests.mismc, testIndex);
-            IntegrateResult(testsTotal.mismclds, tests.mismclds, testIndex);
+            IntegrateResult(mc, testIndex);
+            IntegrateResult(mcblue, testIndex);
+            IntegrateResult(mclds, testIndex);
+            IntegrateResult(ismc1, testIndex);
+            IntegrateResult(ismcblue1, testIndex);
+            IntegrateResult(ismclds1, testIndex);
+            IntegrateResult(ismc2, testIndex);
+            IntegrateResult(ismcblue2, testIndex);
+            IntegrateResult(ismclds2, testIndex);
+            IntegrateResult(mismc, testIndex);
+            IntegrateResult(mismclds, testIndex);
         }
 
         // report results
         {
             // summary to screen
             printf("y=sin(x)*2x from 0 to pi\n");
-            printf("  mc        = %f  (%f)\n", testsTotal.mc.estimate, abs(testsTotal.mc.estimate - c_actual));
-            printf("  mcblue    = %f  (%f)\n", testsTotal.mcblue.estimate, abs(testsTotal.mcblue.estimate - c_actual));
-            printf("  mclds     = %f  (%f)\n", testsTotal.mclds.estimate, abs(testsTotal.mclds.estimate - c_actual));
-            printf("  ismc1     = %f  (%f)\n", testsTotal.ismc1.estimate, abs(testsTotal.ismc1.estimate - c_actual));
-            printf("  ismcblue1 = %f  (%f)\n", testsTotal.ismcblue1.estimate, abs(testsTotal.ismcblue1.estimate - c_actual));
-            printf("  ismclds1  = %f  (%f)\n", testsTotal.ismclds1.estimate, abs(testsTotal.ismclds1.estimate - c_actual));
-            printf("  ismc2     = %f  (%f)\n", testsTotal.ismc2.estimate, abs(testsTotal.ismc2.estimate - c_actual));
-            printf("  ismcblue2 = %f  (%f)\n", testsTotal.ismcblue2.estimate, abs(testsTotal.ismcblue2.estimate - c_actual));
-            printf("  ismclds2  = %f  (%f)\n", testsTotal.ismclds2.estimate, abs(testsTotal.ismclds2.estimate - c_actual));
-            printf("  mismc     = %f  (%f)\n", testsTotal.mismc.estimate, abs(testsTotal.mismc.estimate - c_actual));
-            printf("  mismclds  = %f  (%f)\n", testsTotal.mismclds.estimate, abs(testsTotal.mismclds.estimate - c_actual));
+            printf("  mc        = %f  (%f)\n", mc.estimateAvg, abs(mc.estimateAvg - c_actual));
+            printf("  mcblue    = %f  (%f)\n", mcblue.estimateAvg, abs(mcblue.estimateAvg - c_actual));
+            printf("  mclds     = %f  (%f)\n", mclds.estimateAvg, abs(mclds.estimateAvg - c_actual));
+            printf("  ismc1     = %f  (%f)\n", ismc1.estimateAvg, abs(ismc1.estimateAvg - c_actual));
+            printf("  ismcblue1 = %f  (%f)\n", ismcblue1.estimateAvg, abs(ismcblue1.estimateAvg - c_actual));
+            printf("  ismclds1  = %f  (%f)\n", ismclds1.estimateAvg, abs(ismclds1.estimateAvg - c_actual));
+            printf("  ismc2     = %f  (%f)\n", ismc2.estimateAvg, abs(ismc2.estimateAvg - c_actual));
+            printf("  ismcblue2 = %f  (%f)\n", ismcblue2.estimateAvg, abs(ismcblue2.estimateAvg - c_actual));
+            printf("  ismclds2  = %f  (%f)\n", ismclds2.estimateAvg, abs(ismclds2.estimateAvg - c_actual));
+            printf("  mismc     = %f  (%f)\n", mismc.estimateAvg, abs(mismc.estimateAvg - c_actual));
+            printf("  mismclds  = %f  (%f)\n", mismclds.estimateAvg, abs(mismclds.estimateAvg - c_actual));
             printf("\n");
 
             // details to csv
@@ -627,17 +623,17 @@ int main(int argc, char** argv)
             for (size_t i = 0; i < c_numSamples; ++i)
             {
                 fprintf(file, "\"%zu\",", i);
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mc.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mcblue.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mclds.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismc1.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismcblue1.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismclds1.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismc2.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismcblue2.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.ismclds2.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(testsTotal.mismc.estimates[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\"\n", max(abs(testsTotal.mismclds.estimates[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismc1.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismcblue1.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismclds1.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismc2.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismcblue2.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismclds2.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\"\n", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
             }
             fclose(file);
         }
@@ -656,6 +652,7 @@ TODO:
 
 
 Blog:
+* at top, show plain, very clear : here is how you do MIS. before any explanations. couple lines of code or formula and text.
 * you divide f(x) by the sum of probabilities of the techniques for x. albegraicly this makes sense, but not sure intuitively.
 * real simple / light on math / plainly described.
  * the other articles do a good job, but this is the "lemme just see the code" type of a post
