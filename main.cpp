@@ -436,12 +436,20 @@ void PDFTest3()
     printf("PDFTest3 A+B: %f (%f)\n", integrated, integrated - c_actual);
 }
 
+void PrintfResult(const char* label, const Result& result, double actual)
+{
+    double variance = abs(result.estimateSqAvg - (result.estimateAvg * result.estimateAvg));
+    printf("  %s = %f | abse %f | var %f\n", label, result.estimateAvg, abs(result.estimateAvg - actual), variance);
+}
+
 int main(int argc, char** argv)
 {
 #if DO_PDF_TEST() // experiments to help demonstrate how and why MIS works
+    printf("PDF tests to show aspects of MIS\n");
     PDFTest1(); // showing how the expected value of the sum of 3 PDF's is 3 (instead of 1, it's from 0 to 1)
     PDFTest2(); // showing how the expected value of the sum of 3 PDS's are 3x too large. (0.6 instead of 0.2, it's from 0 to 5)
     PDFTest3(); // showing how this MIS formulaion with 2 PDFs makes two values which are each 50% sized, so adding them together makes the correct value.
+    printf("\n\n\n");
 #endif
 
     printf("%zu tests, with %zu samples each.\n\n", c_numTests, c_numSamples);
@@ -498,12 +506,12 @@ int main(int argc, char** argv)
         {
             // summary to screen
             printf("y = sin(x)*sin(x) from 0 to pi\n");
-            printf("  mc       = %f  (%f)\n", mc.estimateAvg, abs(mc.estimateAvg - c_actual));
-            printf("  mcblue   = %f  (%f)\n", mcblue.estimateAvg, abs(mcblue.estimateAvg - c_actual));
-            printf("  mclds    = %f  (%f)\n", mclds.estimateAvg, abs(mclds.estimateAvg - c_actual));
-            printf("  ismc     = %f  (%f)\n", ismc.estimateAvg, abs(ismc.estimateAvg - c_actual));
-            printf("  ismcblue = %f  (%f)\n", ismcblue.estimateAvg, abs(ismcblue.estimateAvg - c_actual));
-            printf("  ismclds  = %f  (%f)\n", ismclds.estimateAvg, abs(ismclds.estimateAvg - c_actual));
+            PrintfResult("mc       ", mc, c_actual);
+            PrintfResult("mcblue   ", mcblue, c_actual);
+            PrintfResult("mclds    ", mclds, c_actual);
+            PrintfResult("ismc     ", ismc, c_actual);
+            PrintfResult("ismcblue ", ismcblue, c_actual);
+            PrintfResult("ismclds  ", ismclds, c_actual);
             printf("\n");
 
             // details to csv
@@ -602,18 +610,18 @@ int main(int argc, char** argv)
         // report results
         {
             // summary to screen
-            printf("y=sin(x)*2x from 0 to pi\n");
-            printf("  mc        = %f  (%f)\n", mc.estimateAvg, abs(mc.estimateAvg - c_actual));
-            printf("  mcblue    = %f  (%f)\n", mcblue.estimateAvg, abs(mcblue.estimateAvg - c_actual));
-            printf("  mclds     = %f  (%f)\n", mclds.estimateAvg, abs(mclds.estimateAvg - c_actual));
-            printf("  ismc1     = %f  (%f)\n", ismc1.estimateAvg, abs(ismc1.estimateAvg - c_actual));
-            printf("  ismcblue1 = %f  (%f)\n", ismcblue1.estimateAvg, abs(ismcblue1.estimateAvg - c_actual));
-            printf("  ismclds1  = %f  (%f)\n", ismclds1.estimateAvg, abs(ismclds1.estimateAvg - c_actual));
-            printf("  ismc2     = %f  (%f)\n", ismc2.estimateAvg, abs(ismc2.estimateAvg - c_actual));
-            printf("  ismcblue2 = %f  (%f)\n", ismcblue2.estimateAvg, abs(ismcblue2.estimateAvg - c_actual));
-            printf("  ismclds2  = %f  (%f)\n", ismclds2.estimateAvg, abs(ismclds2.estimateAvg - c_actual));
-            printf("  mismc     = %f  (%f)\n", mismc.estimateAvg, abs(mismc.estimateAvg - c_actual));
-            printf("  mismclds  = %f  (%f)\n", mismclds.estimateAvg, abs(mismclds.estimateAvg - c_actual));
+            printf("y = sin(x)*2x from 0 to pi\n");
+            PrintfResult("mc       ", mc, c_actual);
+            PrintfResult("mcblue   ", mcblue, c_actual);
+            PrintfResult("mclds    ", mclds, c_actual);
+            PrintfResult("ismc1    ", ismc1, c_actual);
+            PrintfResult("ismcblue1", ismcblue1, c_actual);
+            PrintfResult("ismclds1 ", ismclds1, c_actual);
+            PrintfResult("ismc2    ", ismc2, c_actual);
+            PrintfResult("ismcblue2", ismcblue2, c_actual);
+            PrintfResult("ismclds2 ", ismclds2, c_actual);
+            PrintfResult("mismc    ", mismc, c_actual);
+            PrintfResult("mismclds ", mismclds, c_actual);
             printf("\n");
 
             // details to csv
@@ -646,7 +654,6 @@ int main(int argc, char** argv)
 
 TODO:
 * stochastically choose the technique? also with LDS (golden ratio)? yes do this.
-* should report variance too - MIS reduces variance?
 * multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
 * multiply other function in like a shadow term?
 
