@@ -253,6 +253,41 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
 }
 
 template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2>
+void MultipleImportanceSampledMonteCarloStochastic(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, Result& result, int seed)
+{
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    result.estimates.resize(c_numSamples);
+
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(dist(rng));
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+        double weight1 = pdf11 / (pdf11 + pdf12);
+
+        double x2 = InverseCDF2(dist(rng));
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+        double weight2 = pdf22 / (pdf21 + pdf22);
+
+        double weight1chance = weight1 / (weight1 + weight2);
+
+        double estimate = dist(rng) < weight1chance
+            ? (F(x1) / pdf11) * (weight1 / weight1chance)
+            : (F(x2) / pdf22) * (weight2 / (1.0 - weight1chance));
+
+        // TODO: understand this better. write out the terms and simplify and think about the results.
+        // TODO: probably use the simpler math but write out the fuller math here.
+
+        AddSampleToRunningAverage(result.estimate, estimate, i);
+        result.estimates[i] = result.estimate;
+    }
+}
+
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2>
 void MultipleImportanceSampledMonteCarloLDS(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, Result& result, int seed)
 {
     std::mt19937 rng = GetRNG(seed);
@@ -526,7 +561,8 @@ int main(int argc, char** argv)
                 fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(ismc.estimatesAvg[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(ismcblue.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\"\n", max(abs(ismclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(ismclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\n");
             }
             fclose(file);
         }
@@ -545,6 +581,7 @@ int main(int argc, char** argv)
         Result ismclds2;
         Result mismc;
         Result mismclds;
+        Result mismcstoc;
 
         // The function we are integrating
         auto F = [](double x) -> double
@@ -593,6 +630,7 @@ int main(int argc, char** argv)
             ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, ismclds2, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismc, testIndex);
             MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismclds, testIndex);
+            MultipleImportanceSampledMonteCarloStochastic(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismcstoc, testIndex);
 
             IntegrateResult(mc, testIndex);
             IntegrateResult(mcblue, testIndex);
@@ -605,6 +643,7 @@ int main(int argc, char** argv)
             IntegrateResult(ismclds2, testIndex);
             IntegrateResult(mismc, testIndex);
             IntegrateResult(mismclds, testIndex);
+            IntegrateResult(mismcstoc, testIndex);
         }
 
         // report results
@@ -622,12 +661,13 @@ int main(int argc, char** argv)
             PrintfResult("ismclds2 ", ismclds2, c_actual);
             PrintfResult("mismc    ", mismc, c_actual);
             PrintfResult("mismclds ", mismclds, c_actual);
+            PrintfResult("mismcstoc", mismcstoc, c_actual);
             printf("\n");
 
             // details to csv
             FILE* file = nullptr;
             fopen_s(&file, "out2.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismclds\"\n");
+            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
             for (size_t i = 0; i < c_numSamples; ++i)
             {
                 fprintf(file, "\"%zu\",", i);
@@ -641,7 +681,9 @@ int main(int argc, char** argv)
                 fprintf(file, "\"%f\",", max(abs(ismcblue2.estimatesAvg[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(ismclds2.estimatesAvg[i] - c_actual), c_minError));
                 fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\"\n", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mismcstoc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\n");
             }
             fclose(file);
         }
@@ -653,7 +695,7 @@ int main(int argc, char** argv)
 /*
 
 TODO:
-* stochastically choose the technique? also with LDS (golden ratio)? yes do this.
+* try LDS for MIS one sample!
 * multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
 * multiply other function in like a shadow term?
 
@@ -671,6 +713,9 @@ Blog:
  * MIS takes more samples.
  * show error on log/log: scatter plot in open office, then format x/y axis to log
  * if no bias, reducing variance is the same as removing error.
+
+ * one sample mis with LDS for stochastic choice should be better than rng.
+ ! mis decreases variance
 
  "it is allowable for some of the p_i to be specialized sampling techniques that concentrate on specific regions of the integrand"
  * aka if you have at least one technique for each section this will work. can have multiple techniques for multiple sections
