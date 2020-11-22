@@ -273,14 +273,13 @@ void MultipleImportanceSampledMonteCarloStochastic(const TF& F, const TPDF1& PDF
         double pdf22 = PDF2(x2);
         double weight2 = pdf22 / (pdf21 + pdf22);
 
-        double weight1chance = weight1 / (weight1 + weight2);
+        double totalWeight = weight1 + weight2;
+
+        double weight1chance = weight1 / totalWeight;
 
         double estimate = dist(rng) < weight1chance
-            ? (F(x1) / pdf11) * (weight1 / weight1chance)
-            : (F(x2) / pdf22) * (weight2 / (1.0 - weight1chance));
-
-        // TODO: understand this better. write out the terms and simplify and think about the results.
-        // TODO: probably use the simpler math but write out the fuller math here.
+            ? (F(x1) / pdf11) * totalWeight  // (F(x1) / pdf11) * (weight1 / weight1chance)
+            : (F(x2) / pdf22) * totalWeight; // (F(x2) / pdf22) * (weight2 / (1.0 - weight1chance));
 
         AddSampleToRunningAverage(result.estimate, estimate, i);
         result.estimates[i] = result.estimate;
@@ -689,6 +688,10 @@ int main(int argc, char** argv)
         }
     }
 
+    // y=sin(x*3)*sin(x*3)*sin(x) from 0 to pi
+    {
+    }
+
     return 0;
 }
 
@@ -696,7 +699,7 @@ int main(int argc, char** argv)
 
 TODO:
 * multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
-* multiply other function in like a shadow term?
+ * don't need to do a lot of tests, just like MC and multi modal MIS
 
 
 Blog:
