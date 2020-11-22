@@ -695,7 +695,6 @@ int main(int argc, char** argv)
 /*
 
 TODO:
-* try LDS for MIS one sample!
 * multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
 * multiply other function in like a shadow term?
 
@@ -714,7 +713,7 @@ Blog:
  * show error on log/log: scatter plot in open office, then format x/y axis to log
  * if no bias, reducing variance is the same as removing error.
 
- * one sample mis with LDS for stochastic choice should be better than rng.
+ * one sample mis with LDS for stochastic choice should be better than rng. find a good 3d lds and use LDS for all parts would be interesting to look at.
  ! mis decreases variance
 
  "it is allowable for some of the p_i to be specialized sampling techniques that concentrate on specific regions of the integrand"
