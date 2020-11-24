@@ -93,12 +93,27 @@ void MakeBlueNoise(std::vector<double>& samples, size_t sampleCount, int seed)
 #endif
 }
 
+template <typename T>
+T Clamp(T value, T min, T max)
+{
+    if (value <= min)
+        return min;
+    if (value >= max)
+        return max;
+    return value;
+}
+
+double Lerp(double A, double B, double t)
+{
+    return A * (1.0 - t) + B * t;
+}
+
 void AddSampleToRunningAverage(double &average, double newValue, size_t sampleCount)
 {
     // Incremental averaging: lerp from old value to new value by 1/(sampleCount+1)
     // https://blog.demofox.org/2016/08/23/incremental-averaging/
     double t = 1.0 / double(sampleCount + 1);
-    average = average * (1.0 - t) + newValue * t;
+    average = Lerp(average, newValue, t);
 }
 
 template <typename TF>
@@ -246,6 +261,46 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
             y1 / (pdf11 + pdf12) +
             y2 / (pdf21 + pdf22)
         ;
+
+        AddSampleToRunningAverage(result.estimate, value, i);
+        result.estimates[i] = result.estimate;
+    }
+}
+
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2, typename TPDF3, typename TINVERSECDF3>
+void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, const TPDF3& PDF3, const TINVERSECDF3& InverseCDF3, Result& result, int seed)
+{
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    result.estimates.resize(c_numSamples);
+
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(dist(rng));
+        double y1 = F(x1);
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+        double pdf13 = PDF3(x1);
+
+        double x2 = InverseCDF2(dist(rng));
+        double y2 = F(x2);
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+        double pdf23 = PDF3(x2);
+
+        double x3 = InverseCDF3(dist(rng));
+        double y3 = F(x3);
+        double pdf31 = PDF1(x3);
+        double pdf32 = PDF2(x3);
+        double pdf33 = PDF3(x3);
+
+        double value =
+            y1 / (pdf11 + pdf12 + pdf13) +
+            y2 / (pdf21 + pdf22 + pdf23) + 
+            y3 / (pdf31 + pdf32 + pdf33)
+            ;
 
         AddSampleToRunningAverage(result.estimate, value, i);
         result.estimates[i] = result.estimate;
@@ -476,6 +531,53 @@ void PrintfResult(const char* label, const Result& result, double actual)
     printf("  %s = %f | abse %f | var %f\n", label, result.estimateAvg, abs(result.estimateAvg - actual), variance);
 }
 
+template <typename TPDF>
+void TestPDF(const TPDF& PDF, double min, double max, const char* fileName)
+{
+    static const size_t c_buckets = 100;
+    FILE* file = nullptr;
+    fopen_s(&file, fileName, "w+b");
+    fprintf(file, "\"x\",\"PDF(x)\"\n");
+    for (size_t index = 0; index < c_buckets; ++index)
+    {
+        double percent = (double(index) + 0.5) / double(c_buckets);
+        double x = Lerp(min, max, percent);
+        double pdf = PDF(x);
+        fprintf(file, "\"%f\",\"%f\"\n", x, pdf);
+    }
+    fclose(file);
+}
+
+template <typename TICDF>
+void TestICDF(const TICDF& ICDF, double min, double max, const char* fileName)
+{
+    static const size_t c_buckets = 100;
+    static const size_t c_values = 10000;
+
+    std::vector<size_t> histogram(c_buckets, 0);
+
+    for (size_t index = 0; index < c_values; ++index)
+    {
+        double percent = (double(index) + 0.5) / double(c_values);
+        double x = ICDF(percent);
+
+        double xpercent = (x - min) / (max - min);
+        size_t xbucket = Clamp<size_t>(size_t(xpercent * double(c_buckets)), 0, c_buckets - 1);
+        histogram[xbucket]++;
+    }
+
+    FILE* file = nullptr;
+    fopen_s(&file, fileName, "w+b");
+    fprintf(file, "\"x\",\"count\"\n");
+    for (size_t index = 0; index < c_buckets; ++index)
+    {
+        double percent = (double(index) + 0.5) / double(c_values);
+        fprintf(file, "\"%f\",\"%zu\"\n", percent, histogram[index]);
+    }
+
+    fclose(file);
+}
+
 int main(int argc, char** argv)
 {
 #if DO_PDF_TEST() // experiments to help demonstrate how and why MIS works
@@ -688,8 +790,118 @@ int main(int argc, char** argv)
         }
     }
 
-    // y=sin(x*3)*sin(x*3)*sin(x) from 0 to pi
+    // y=sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi
     {
+        Result mc;
+        Result mismc;
+
+        // The function we are integrating
+        auto F = [](double x) -> double
+        {
+            return sin(x * 3.0) * sin(x * 3.0) * sin(x) * sin(x);
+        };
+
+        // the PDF and inverse CDF of distributions we are using for integration
+        auto PDF = [](double x) -> double
+        {
+            // normalizing y=sin(x) from 0 to pi to integrate to 1 from 0 to pi
+            return sin(x) / 2.0;
+        };
+
+        auto InverseCDF = [](double x) -> double
+        {
+            // turning the PDF into a CDF, flipping x and y, and solving for y again
+            return 2.0 * asin(sqrt(x));
+        };
+
+        // [0,1/3)
+        auto PDF1 = [PDF](double x) -> double
+        {
+            x = x * 3.0 - 0.0 * c_pi;
+
+            if (x < 0.0 || x >= c_pi)
+                return 0.0;
+
+            return PDF(x) * 3.0;
+        };
+
+        auto InverseCDF1 = [InverseCDF](double x) -> double
+        {
+            return InverseCDF(x) * 1.0 / 3.0 + c_pi * 0.0 / 3.0;
+        };
+
+        // [1/3,2/3)
+        auto PDF2 = [PDF](double x) -> double
+        {
+            x = x * 3.0 - 1.0 * c_pi;
+
+            if (x < 0.0 || x >= c_pi)
+                return 0.0;
+
+            return PDF(x) * 3.0;
+        };
+
+        auto InverseCDF2 = [InverseCDF](double x) -> double
+        {
+            return InverseCDF(x) * 1.0 / 3.0 + c_pi * 1.0 / 3.0;
+        };
+
+        // [2/3,2/3]
+        auto PDF3 = [PDF](double x) -> double
+        {
+            x = x * 3.0 - 2.0 * c_pi;
+
+            if (x < 0.0 || x > c_pi)
+                return 0.0;
+
+            return PDF(x) * 3.0;
+        };
+
+        auto InverseCDF3 = [InverseCDF](double x) -> double
+        {
+            return InverseCDF(x) * 1.0 / 3.0 + c_pi * 2.0 / 3.0;
+        };
+
+        TestPDF(PDF1, 0.0, c_pi, "out3_pdf1.csv");
+        TestPDF(PDF2, 0.0, c_pi, "out3_pdf2.csv");
+        TestPDF(PDF3, 0.0, c_pi, "out3_pdf3.csv");
+        TestICDF(InverseCDF1, 0.0, c_pi, "out3_icdf1.csv");
+        TestICDF(InverseCDF2, 0.0, c_pi, "out3_icdf2.csv");
+        TestICDF(InverseCDF3, 0.0, c_pi, "out3_icdf3.csv");
+
+        double c_actual = c_pi / 4.0;
+
+        // numerical integration
+        for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
+        {
+            MonteCarlo(F, mc, testIndex);
+            MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismc, testIndex);
+
+            IntegrateResult(mc, testIndex);
+            IntegrateResult(mismc, testIndex);
+        }
+
+        // report results
+        {
+            // summary to screen
+            printf("y=sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi\n");
+            PrintfResult("mc       ", mc, c_actual);
+            PrintfResult("mismc    ", mismc, c_actual);
+            printf("\n");
+
+            // details to csv
+            FILE* file = nullptr;
+            fopen_s(&file, "out3.csv", "wb");
+            fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
+            for (size_t i = 0; i < c_numSamples; ++i)
+            {
+                fprintf(file, "\"%zu\",", i);
+                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                fprintf(file, "\n");
+            }
+            fclose(file);
+        }
     }
 
     return 0;
@@ -698,9 +910,7 @@ int main(int argc, char** argv)
 /*
 
 TODO:
-* multi modal function - to show how you need support over the full range but each individual thing doesn't need to give full support
- * don't need to do a lot of tests, just like MC and multi modal MIS
-
+* make variance graphs?
 
 Blog:
 * at top, show plain, very clear : here is how you do MIS. before any explanations. couple lines of code or formula and text.
@@ -715,6 +925,8 @@ Blog:
  * MIS takes more samples.
  * show error on log/log: scatter plot in open office, then format x/y axis to log
  * if no bias, reducing variance is the same as removing error.
+ ? should we show variance graphs or only error?
+ * show the graph of "out3 incorrect" to show how you can see that it's converging to the wrong value. not a case of "not converging". hard to tell by just looking at numbers though.
 
  * one sample mis with LDS for stochastic choice should be better than rng. find a good 3d lds and use LDS for all parts would be interesting to look at.
  ! mis decreases variance
