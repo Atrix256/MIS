@@ -6,7 +6,7 @@
 
 #define DO_PDF_TEST() true
 
-static const size_t c_numSamples = 1000;
+static const size_t c_numSamples = 5000;
 static const size_t c_numTests = 10000;
 
 static const double c_pi = 3.14159265359;
@@ -17,7 +17,9 @@ static const double c_minError = 0.00001; // to avoid errors when showing on a l
 std::mt19937 GetRNG(int seed)
 {
 #if DETERMINISTIC()
-    std::mt19937 mt(seed);
+    static int internalSeed = 0;
+    internalSeed++;
+    std::mt19937 mt(internalSeed * 1000 + seed);
 #else
     std::random_device rd("/dev/random");
     std::mt19937 mt(rd());
