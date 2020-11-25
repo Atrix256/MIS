@@ -273,6 +273,40 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
     }
 }
 
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2>
+void MultipleImportanceSampledMonteCarloBlue(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, Result& result, int seed)
+{
+    std::vector<double> blueNoise1;
+    MakeBlueNoise(blueNoise1, c_numSamples, seed);
+
+    std::vector<double> blueNoise2;
+    MakeBlueNoise(blueNoise2, c_numSamples, seed);
+
+    result.estimates.resize(c_numSamples);
+
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(blueNoise1[i]);
+        double y1 = F(x1);
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+
+        double x2 = InverseCDF2(blueNoise2[i]);
+        double y2 = F(x2);
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+
+        double value =
+            y1 / (pdf11 + pdf12) +
+            y2 / (pdf21 + pdf22)
+            ;
+
+        AddSampleToRunningAverage(result.estimate, value, i);
+        result.estimates[i] = result.estimate;
+    }
+}
+
 template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2, typename TPDF3, typename TINVERSECDF3>
 void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, const TPDF3& PDF3, const TINVERSECDF3& InverseCDF3, Result& result, int seed)
 {
@@ -305,6 +339,52 @@ void MultipleImportanceSampledMonteCarlo(const TF& F, const TPDF1& PDF1, const T
         double value =
             y1 / (pdf11 + pdf12 + pdf13) +
             y2 / (pdf21 + pdf22 + pdf23) + 
+            y3 / (pdf31 + pdf32 + pdf33)
+            ;
+
+        AddSampleToRunningAverage(result.estimate, value, i);
+        result.estimates[i] = result.estimate;
+    }
+}
+
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2, typename TPDF3, typename TINVERSECDF3>
+void MultipleImportanceSampledMonteCarloBlue(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, const TPDF3& PDF3, const TINVERSECDF3& InverseCDF3, Result& result, int seed)
+{
+    std::vector<double> blueNoise1;
+    MakeBlueNoise(blueNoise1, c_numSamples, seed);
+
+    std::vector<double> blueNoise2;
+    MakeBlueNoise(blueNoise2, c_numSamples, seed);
+
+    std::vector<double> blueNoise3;
+    MakeBlueNoise(blueNoise3, c_numSamples, seed);
+
+    result.estimates.resize(c_numSamples);
+
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(blueNoise1[i]);
+        double y1 = F(x1);
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+        double pdf13 = PDF3(x1);
+
+        double x2 = InverseCDF2(blueNoise2[i]);
+        double y2 = F(x2);
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+        double pdf23 = PDF3(x2);
+
+        double x3 = InverseCDF3(blueNoise3[i]);
+        double y3 = F(x3);
+        double pdf31 = PDF1(x3);
+        double pdf32 = PDF2(x3);
+        double pdf33 = PDF3(x3);
+
+        double value =
+            y1 / (pdf11 + pdf12 + pdf13) +
+            y2 / (pdf21 + pdf22 + pdf23) +
             y3 / (pdf31 + pdf32 + pdf33)
             ;
 
@@ -758,6 +838,7 @@ int main(int argc, char** argv)
         Result ismcblue2;
         Result ismclds2;
         Result mismc;
+        Result mismcblue;
         Result mismclds;
         Result mismcstoc;
 
@@ -807,6 +888,7 @@ int main(int argc, char** argv)
             ImportanceSampledMonteCarloBlue(F, PDF2, InverseCDF2, ismcblue2, testIndex);
             ImportanceSampledMonteCarloLDS(F, PDF2, InverseCDF2, ismclds2, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismc, testIndex);
+            MultipleImportanceSampledMonteCarloBlue(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismcblue, testIndex);
             MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismclds, testIndex);
             MultipleImportanceSampledMonteCarloStochastic(F, PDF1, InverseCDF1, PDF2, InverseCDF2, mismcstoc, testIndex);
 
@@ -820,6 +902,7 @@ int main(int argc, char** argv)
             IntegrateResult(ismcblue2, testIndex);
             IntegrateResult(ismclds2, testIndex);
             IntegrateResult(mismc, testIndex);
+            IntegrateResult(mismcblue, testIndex);
             IntegrateResult(mismclds, testIndex);
             IntegrateResult(mismcstoc, testIndex);
         }
@@ -838,6 +921,7 @@ int main(int argc, char** argv)
             PrintfResult("ismcblue2", ismcblue2, c_actual);
             PrintfResult("ismclds2 ", ismclds2, c_actual);
             PrintfResult("mismc    ", mismc, c_actual);
+            PrintfResult("mismcblue", mismcblue, c_actual);
             PrintfResult("mismclds ", mismclds, c_actual);
             PrintfResult("mismcstoc", mismcstoc, c_actual);
             printf("\n");
@@ -846,7 +930,7 @@ int main(int argc, char** argv)
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out2.abse.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcblue\",\"mismcstoc\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
@@ -860,6 +944,7 @@ int main(int argc, char** argv)
                     fprintf(file, "\"%f\",", max(abs(ismcblue2.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(ismclds2.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismcblue.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismcstoc.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\n");
@@ -869,7 +954,7 @@ int main(int argc, char** argv)
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out2.var.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcblue\",\"mismcstoc\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
@@ -883,6 +968,7 @@ int main(int argc, char** argv)
                     fprintf(file, "\"%f\",", max(Variance(ismcblue2.estimatesAvg[i], ismcblue2.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(ismclds2.estimatesAvg[i], ismclds2.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismc.estimatesAvg[i], mismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismcblue.estimatesAvg[i], mismcblue.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismcstoc.estimatesAvg[i], mismcstoc.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismclds.estimatesAvg[i], mismclds.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\n");
@@ -895,8 +981,10 @@ int main(int argc, char** argv)
     // y=sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi
     {
         Result mc;
+        Result mcblue;
         Result mclds;
         Result mismc;
+        Result mismcblue;
         Result mismclds;
 
         // The function we are integrating
@@ -979,13 +1067,17 @@ int main(int argc, char** argv)
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
         {
             MonteCarlo(F, mc, testIndex);
+            MonteCarloBlue(F, mcblue, testIndex);
             MonteCarloLDS(F, mclds, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismc, testIndex);
+            MultipleImportanceSampledMonteCarloBlue(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismcblue, testIndex);
             MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismclds, testIndex);
 
             IntegrateResult(mc, testIndex);
+            IntegrateResult(mcblue, testIndex);
             IntegrateResult(mclds, testIndex);
             IntegrateResult(mismc, testIndex);
+            IntegrateResult(mismcblue, testIndex);
             IntegrateResult(mismclds, testIndex);
         }
 
@@ -994,8 +1086,10 @@ int main(int argc, char** argv)
             // summary to screen
             printf("y = sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi\n");
             PrintfResult("mc       ", mc, c_actual);
+            PrintfResult("mcblue   ", mcblue, c_actual);
             PrintfResult("mclds    ", mclds, c_actual);
             PrintfResult("mismc    ", mismc, c_actual);
+            PrintfResult("mismcblue", mismcblue, c_actual);
             PrintfResult("mismclds ", mismclds, c_actual);
             printf("\n");
 
@@ -1003,13 +1097,15 @@ int main(int argc, char** argv)
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out3.abse.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mclds\",\"mismc\",\"mismclds\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"mismc\",\"mismcblue\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
                     fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismcblue.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\n");
                 }
@@ -1018,13 +1114,15 @@ int main(int argc, char** argv)
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out3.var.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mclds\",\"mismc\",\"mismclds\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"mismc\",\"mismcblue\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
                     fprintf(file, "\"%f\",", max(Variance(mc.estimatesAvg[i], mc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mcblue.estimatesAvg[i], mcblue.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mclds.estimatesAvg[i], mclds.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismc.estimatesAvg[i], mismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismcblue.estimatesAvg[i], mismcblue.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismclds.estimatesAvg[i], mismclds.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\n");
                 }
@@ -1035,18 +1133,3 @@ int main(int argc, char** argv)
 
     return 0;
 }
-
-// TODO: Blue noise everything next!
-
-/*
-
-Blog:
- * show error on log/log: scatter plot in open office, then format x/y axis to log
- * if no bias, reducing variance is the same as removing error.
- ? should we show variance graphs or only error?
- * one sample mis with LDS for stochastic choice should be better than rng. find a good 3d lds and use LDS for all parts would be interesting to look at.
- ! mis decreases variance
-
- ! blue noise decreases variance. Could show that. not as much as LDS, but better than white noise.
-
-*/
