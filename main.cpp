@@ -2,7 +2,10 @@
 #include <vector>
 
 #define DETERMINISTIC() true
-#define DO_BLUE_NOISE() false  // blue noise is very slow to generate, and doesn't have good convergence speed
+
+// Blue noise is very slow to generate, and doesn't have good convergence speed, but does decrease variance compared to white noise.
+// Decrease c_numSamples and/or c_numtests if turning blue noise on.
+#define DO_BLUE_NOISE() false
 
 #define DO_PDF_TEST() true
 
@@ -12,6 +15,7 @@ static const size_t c_numTests = 10000;
 static const double c_pi = 3.14159265359;
 static const double c_goldeRatioConjugate = 0.61803398875;
 static const double c_sqrt2 = sqrt(2.0);
+static const double c_sqrt5 = sqrt(5.0);
 static const double c_minError = 0.00001; // to avoid errors when showing on a log plot
 
 std::mt19937 GetRNG(int seed)
@@ -376,6 +380,53 @@ void MultipleImportanceSampledMonteCarloLDS(const TF& F, const TPDF1& PDF1, cons
 
         lds1 = fmod(lds1 + c_goldeRatioConjugate, 1.0f);
         lds2 = fmod(lds2 + c_sqrt2, 1.0f);
+    }
+}
+
+template <typename TF, typename TPDF1, typename TINVERSECDF1, typename TPDF2, typename TINVERSECDF2, typename TPDF3, typename TINVERSECDF3>
+void MultipleImportanceSampledMonteCarloLDS(const TF& F, const TPDF1& PDF1, const TINVERSECDF1& InverseCDF1, const TPDF2& PDF2, const TINVERSECDF2& InverseCDF2, const TPDF3& PDF3, const TINVERSECDF3& InverseCDF3, Result& result, int seed)
+{
+    std::mt19937 rng = GetRNG(seed);
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+
+    result.estimates.resize(c_numSamples);
+
+    double lds1 = dist(rng);
+    double lds2 = dist(rng);
+    double lds3 = dist(rng);
+    result.estimate = 0.0f;
+    for (size_t i = 0; i < c_numSamples; ++i)
+    {
+        double x1 = InverseCDF1(lds1);
+        double y1 = F(x1);
+        double pdf11 = PDF1(x1);
+        double pdf12 = PDF2(x1);
+        double pdf13 = PDF3(x1);
+
+        double x2 = InverseCDF2(lds2);
+        double y2 = F(x2);
+        double pdf21 = PDF1(x2);
+        double pdf22 = PDF2(x2);
+        double pdf23 = PDF3(x2);
+
+        double x3 = InverseCDF3(lds3);
+        double y3 = F(x3);
+        double pdf31 = PDF1(x3);
+        double pdf32 = PDF2(x3);
+        double pdf33 = PDF3(x3);
+
+        double value =
+            y1 / (pdf11 + pdf12 + pdf13) +
+            y2 / (pdf21 + pdf22 + pdf23) +
+            y3 / (pdf31 + pdf32 + pdf33)
+            ;
+
+        AddSampleToRunningAverage(result.estimate, value, i);
+        result.estimates[i] = result.estimate;
+
+        lds1 = fmod(lds1 + c_goldeRatioConjugate, 1.0f);
+        lds2 = fmod(lds2 + c_sqrt2, 1.0f);
+        lds3 = fmod(lds2 + c_sqrt5, 1.0f);
     }
 }
 
@@ -844,7 +895,9 @@ int main(int argc, char** argv)
     // y=sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi
     {
         Result mc;
+        Result mclds;
         Result mismc;
+        Result mismclds;
 
         // The function we are integrating
         auto F = [](double x) -> double
@@ -926,10 +979,14 @@ int main(int argc, char** argv)
         for (int testIndex = 0; testIndex < c_numTests; ++testIndex)
         {
             MonteCarlo(F, mc, testIndex);
+            MonteCarloLDS(F, mclds, testIndex);
             MultipleImportanceSampledMonteCarlo(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismc, testIndex);
+            MultipleImportanceSampledMonteCarloLDS(F, PDF1, InverseCDF1, PDF2, InverseCDF2, PDF3, InverseCDF3, mismclds, testIndex);
 
             IntegrateResult(mc, testIndex);
+            IntegrateResult(mclds, testIndex);
             IntegrateResult(mismc, testIndex);
+            IntegrateResult(mismclds, testIndex);
         }
 
         // report results
@@ -937,19 +994,23 @@ int main(int argc, char** argv)
             // summary to screen
             printf("y = sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi\n");
             PrintfResult("mc       ", mc, c_actual);
+            PrintfResult("mclds    ", mclds, c_actual);
             PrintfResult("mismc    ", mismc, c_actual);
+            PrintfResult("mismclds ", mismclds, c_actual);
             printf("\n");
 
             // details to csv
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out3.abse.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mclds\",\"mismc\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
                     fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
                     fprintf(file, "\n");
                 }
                 fclose(file);
@@ -957,12 +1018,14 @@ int main(int argc, char** argv)
             {
                 FILE* file = nullptr;
                 fopen_s(&file, "out3.var.csv", "wb");
-                fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
+                fprintf(file, "\"index\",\"mc\",\"mclds\",\"mismc\",\"mismclds\"\n");
                 for (size_t i = 0; i < c_numSamples; ++i)
                 {
                     fprintf(file, "\"%zu\",", i);
                     fprintf(file, "\"%f\",", max(Variance(mc.estimatesAvg[i], mc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mclds.estimatesAvg[i], mclds.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\"%f\",", max(Variance(mismc.estimatesAvg[i], mismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismclds.estimatesAvg[i], mismclds.estimatesSqAvg[i]), c_minError));
                     fprintf(file, "\n");
                 }
                 fclose(file);
@@ -973,6 +1036,8 @@ int main(int argc, char** argv)
     return 0;
 }
 
+// TODO: Blue noise everything next!
+
 /*
 
 Blog:
@@ -981,5 +1046,7 @@ Blog:
  ? should we show variance graphs or only error?
  * one sample mis with LDS for stochastic choice should be better than rng. find a good 3d lds and use LDS for all parts would be interesting to look at.
  ! mis decreases variance
+
+ ! blue noise decreases variance. Could show that. not as much as LDS, but better than white noise.
 
 */
