@@ -913,31 +913,10 @@ TODO:
 * make variance graphs?
 
 Blog:
-* at top, show plain, very clear : here is how you do MIS. before any explanations. couple lines of code or formula and text.
-* you divide f(x) by the sum of probabilities of the techniques for x. albegraicly this makes sense, but not sure intuitively.
-* real simple / light on math / plainly described.
- * the other articles do a good job, but this is the "lemme just see the code" type of a post
-* a follow up to 1d monte carlo / importance sampling:
- * https://blog.demofox.org/2018/06/12/monte-carlo-integration-explanation-in-1d/
- * note that you can give a different number of samples for each technique, if you think they will do better than others.
- ! could learn on the fly maybe. is that adaptive MIS?
- ! show how LDS + IS doesn't work well together. (actually, probably works fine in 1d). show blue noise
- * MIS takes more samples.
  * show error on log/log: scatter plot in open office, then format x/y axis to log
  * if no bias, reducing variance is the same as removing error.
  ? should we show variance graphs or only error?
- * show the graph of "out3 incorrect" to show how you can see that it's converging to the wrong value. not a case of "not converging". hard to tell by just looking at numbers though.
-
  * one sample mis with LDS for stochastic choice should be better than rng. find a good 3d lds and use LDS for all parts would be interesting to look at.
  ! mis decreases variance
-
- "it is allowable for some of the p_i to be specialized sampling techniques that concentrate on specific regions of the integrand"
- * aka if you have at least one technique for each section this will work. can have multiple techniques for multiple sections
- * a technique doesn't need to fit the whole function though!
-
-Links:
-https://64.github.io/multiple-importance-sampling/
-https://www.breakin.se/mc-intro/index.html#toc3
-https://graphics.stanford.edu/courses/cs348b-03/papers/veach-chapter9.pdf
 
 */
