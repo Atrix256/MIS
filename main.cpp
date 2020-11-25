@@ -527,9 +527,14 @@ void PDFTest3()
     printf("PDFTest3 A+B: %f (%f)\n", integrated, integrated - c_actual);
 }
 
+double Variance(double avg, double sqAvg)
+{
+    return abs(sqAvg - (avg * avg));
+}
+
 void PrintfResult(const char* label, const Result& result, double actual)
 {
-    double variance = abs(result.estimateSqAvg - (result.estimateAvg * result.estimateAvg));
+    double variance = Variance(result.estimateAvg, result.estimateSqAvg);
     printf("  %s = %f | abse %f | var %f\n", label, result.estimateAvg, abs(result.estimateAvg - actual), variance);
 }
 
@@ -653,21 +658,40 @@ int main(int argc, char** argv)
             printf("\n");
 
             // details to csv
-            FILE* file = nullptr;
-            fopen_s(&file, "out1.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc\",\"ismcblue\",\"ismclds\"\n");
-            for (size_t i = 0; i < c_numSamples; ++i)
             {
-                fprintf(file, "\"%zu\",", i);
-                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismcblue.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismclds.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\n");
+                FILE* file = nullptr;
+                fopen_s(&file, "out1.abse.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc\",\"ismcblue\",\"ismclds\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismcblue.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismclds.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
             }
-            fclose(file);
+            {
+                FILE* file = nullptr;
+                fopen_s(&file, "out1.var.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc\",\"ismcblue\",\"ismclds\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(Variance(mc.estimatesAvg[i], mc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mcblue.estimatesAvg[i], mcblue.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mclds.estimatesAvg[i], mclds.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismc.estimatesAvg[i], ismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismcblue.estimatesAvg[i], ismcblue.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismclds.estimatesAvg[i], ismclds.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
+            }
         }
     }
 
@@ -768,27 +792,52 @@ int main(int argc, char** argv)
             printf("\n");
 
             // details to csv
-            FILE* file = nullptr;
-            fopen_s(&file, "out2.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
-            for (size_t i = 0; i < c_numSamples; ++i)
             {
-                fprintf(file, "\"%zu\",", i);
-                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismc1.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismcblue1.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismclds1.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismc2.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismcblue2.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(ismclds2.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mismcstoc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\n");
+                FILE* file = nullptr;
+                fopen_s(&file, "out2.abse.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mcblue.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mclds.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismc1.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismcblue1.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismclds1.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismc2.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismcblue2.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(ismclds2.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismcstoc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismclds.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
             }
-            fclose(file);
+            {
+                FILE* file = nullptr;
+                fopen_s(&file, "out2.var.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mcblue\",\"mclds\",\"ismc1\",\"ismcblue1\",\"ismclds1\",\"ismc2\",\"ismcblue2\",\"ismclds2\",\"mismc\",\"mismcstoc\",\"mismclds\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(Variance(mc.estimatesAvg[i], mc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mcblue.estimatesAvg[i], mcblue.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mclds.estimatesAvg[i], mclds.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismc1.estimatesAvg[i], ismc1.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismcblue1.estimatesAvg[i], ismcblue1.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismclds1.estimatesAvg[i], ismclds1.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismc2.estimatesAvg[i], ismc2.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismcblue2.estimatesAvg[i], ismcblue2.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(ismclds2.estimatesAvg[i], ismclds2.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismc.estimatesAvg[i], mismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismcstoc.estimatesAvg[i], mismcstoc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismclds.estimatesAvg[i], mismclds.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
+            }
         }
     }
 
@@ -886,23 +935,38 @@ int main(int argc, char** argv)
         // report results
         {
             // summary to screen
-            printf("y=sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi\n");
+            printf("y = sin(x*3)*sin(x*3)*sin(x)*sin(x) from 0 to pi\n");
             PrintfResult("mc       ", mc, c_actual);
             PrintfResult("mismc    ", mismc, c_actual);
             printf("\n");
 
             // details to csv
-            FILE* file = nullptr;
-            fopen_s(&file, "out3.csv", "wb");
-            fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
-            for (size_t i = 0; i < c_numSamples; ++i)
             {
-                fprintf(file, "\"%zu\",", i);
-                fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
-                fprintf(file, "\n");
+                FILE* file = nullptr;
+                fopen_s(&file, "out3.abse.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(abs(mc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\"%f\",", max(abs(mismc.estimatesAvg[i] - c_actual), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
             }
-            fclose(file);
+            {
+                FILE* file = nullptr;
+                fopen_s(&file, "out3.var.csv", "wb");
+                fprintf(file, "\"index\",\"mc\",\"mismc\"\n");
+                for (size_t i = 0; i < c_numSamples; ++i)
+                {
+                    fprintf(file, "\"%zu\",", i);
+                    fprintf(file, "\"%f\",", max(Variance(mc.estimatesAvg[i], mc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\"%f\",", max(Variance(mismc.estimatesAvg[i], mismc.estimatesSqAvg[i]), c_minError));
+                    fprintf(file, "\n");
+                }
+                fclose(file);
+            }
         }
     }
 
@@ -910,9 +974,6 @@ int main(int argc, char** argv)
 }
 
 /*
-
-TODO:
-* make variance graphs?
 
 Blog:
  * show error on log/log: scatter plot in open office, then format x/y axis to log
